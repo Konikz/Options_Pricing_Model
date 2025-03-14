@@ -1,39 +1,46 @@
+import streamlit as st
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import norm
 
-# Black-Scholes call option pricing function
-def black_scholes_call(S, K, T, r, sigma):
-    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+def black_scholes(S, K, T, r, sigma):
+    """Computes Black-Scholes Call & Put option prices"""
+    d1 = (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
-    return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
 
-# Define range for stock price (S0) and volatility (σ)
-S0_range = np.linspace(80, 120, 20)  # Stock prices from 80 to 120
-vol_range = np.linspace(0.1, 0.5, 20)  # Volatility from 0.1 to 0.5
+    call_price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+    put_price = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
 
-# Compute option prices using the Black-Scholes model
-data = np.array([[black_scholes_call(S, 110, 1, 0.05, sigma)  # K=110, T=1, r=5%
-                  for S in S0_range] for sigma in vol_range])
+    return call_price, put_price
 
-# Convert to DataFrame for visualization
-df = pd.DataFrame(data, index=np.round(vol_range, 2), columns=np.round(S0_range, 2))
+# Streamlit UI
+st.title("Black-Scholes Option Pricing Heatmap")
 
-# Set up the heatmap
-plt.figure(figsize=(10, 8))
-sns.heatmap(df, annot=False, cmap="coolwarm", cbar=True)
+# User Inputs
+min_S0 = st.number_input("Min Stock Price (S0)", value=80.0)
+max_S0 = st.number_input("Max Stock Price (S0)", value=120.0)
+min_sigma = st.number_input("Min Volatility (σ)", value=0.10)
+max_sigma = st.number_input("Max Volatility (σ)", value=0.50)
+grid_size = st.slider("Grid Size", min_value=10, max_value=50, value=30)
 
-# Customize plot aesthetics
-plt.xlabel("Stock Price (S0)", fontsize=12, color="white")
-plt.ylabel("Volatility (σ)", fontsize=12, color="white")
-plt.title("Black-Scholes Call Option Pricing Heatmap", fontsize=14, color="white")
+# Dropdown to choose between Call and Put
+option_type = st.selectbox("Select Option Type", ["Call", "Put"])
 
-# Set dark mode styling
-plt.gca().patch.set_facecolor('none')  # Transparent background
-plt.xticks(rotation=45, fontsize=10, color="white")
-plt.yticks(fontsize=10, color="white")
+# Generate data grid
+stock_prices = np.linspace(min_S0, max_S0, grid_size)
+volatilities = np.linspace(min_sigma, max_sigma, grid_size)
 
-# Show the plot
-plt.show()
+heatmap_data = np.zeros((grid_size, grid_size))
+
+for i, S0 in enumerate(stock_prices):
+    for j, sigma in enumerate(volatilities):
+        call_price, put_price = black_scholes(S0, 100, 1, 0.05, sigma)  # Strike = 100, T=1, r=5%
+        heatmap_data[j, i] = call_price if option_type == "Call" else put_price
+
+# Plot the heatmap
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.heatmap(heatmap_data, xticklabels=np.round(stock_prices, 2), 
+            yticklabels=np.round(volatilities, 2), cmap="coolwarm", ax=ax)
+
+st.pyplot(fig)
