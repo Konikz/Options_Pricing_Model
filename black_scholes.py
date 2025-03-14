@@ -1,42 +1,39 @@
-import math
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from scipy.stats import norm
 
-def black_scholes(S0, K, T, r, sigma):
-    """
-    Computes the Black-Scholes price for a European call and put option.
+# Black-Scholes call option pricing function
+def black_scholes_call(S, K, T, r, sigma):
+    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+    return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
 
-    Parameters:
-    S0 (float)  : Current stock price
-    K (float)   : Strike price
-    T (float)   : Time to expiry (in years)
-    r (float)   : Risk-free interest rate (as a decimal)
-    sigma (float): Volatility of the stock (as a decimal)
+# Define range for stock price (S0) and volatility (σ)
+S0_range = np.linspace(80, 120, 20)  # Stock prices from 80 to 120
+vol_range = np.linspace(0.1, 0.5, 20)  # Volatility from 0.1 to 0.5
 
-    Returns:
-    tuple: (Call price, Put price)
-    """
-    d1 = (math.log(S0 / K) + (r + (sigma ** 2) / 2) * T) / (sigma * math.sqrt(T))
-    d2 = d1 - sigma * math.sqrt(T)
+# Compute option prices using the Black-Scholes model
+data = np.array([[black_scholes_call(S, 110, 1, 0.05, sigma)  # K=110, T=1, r=5%
+                  for S in S0_range] for sigma in vol_range])
 
-    call_price = S0 * norm.cdf(d1) - K * math.exp(-r * T) * norm.cdf(d2)
-    put_price = K * math.exp(-r * T) * norm.cdf(-d2) - S0 * norm.cdf(-d1)
+# Convert to DataFrame for visualization
+df = pd.DataFrame(data, index=np.round(vol_range, 2), columns=np.round(S0_range, 2))
 
-    return round(call_price, 2), round(put_price, 2)
+# Set up the heatmap
+plt.figure(figsize=(10, 8))
+sns.heatmap(df, annot=False, cmap="coolwarm", cbar=True)
 
-if __name__ == "__main__":
-    print("Welcome to the Black-Scholes Option Pricer")
-    
-    # Taking user inputs
-    S0 = float(input("Enter Current Stock Price (S0): "))
-    K = float(input("Enter Strike Price (K): "))
-    T = float(input("Enter Time to Expiry in years (T): "))
-    r = float(input("Enter Risk-Free Interest Rate as decimal (r): "))
-    sigma = float(input("Enter Volatility as decimal (σ): "))
+# Customize plot aesthetics
+plt.xlabel("Stock Price (S0)", fontsize=12, color="white")
+plt.ylabel("Volatility (σ)", fontsize=12, color="white")
+plt.title("Black-Scholes Call Option Pricing Heatmap", fontsize=14, color="white")
 
-    # Compute option prices
-    call, put = black_scholes(S0, K, T, r, sigma)
+# Set dark mode styling
+plt.gca().patch.set_facecolor('none')  # Transparent background
+plt.xticks(rotation=45, fontsize=10, color="white")
+plt.yticks(fontsize=10, color="white")
 
-    # Print the results
-    print("\nCalculated Option Prices:")
-    print(f"Call Option Price: {call}")
-    print(f"Put Option Price: {put}")
+# Show the plot
+plt.show()
