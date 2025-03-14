@@ -1,46 +1,77 @@
-import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+from pymongo import MongoClient
 from scipy.stats import norm
+import datetime
+
+# MongoDB Setup
+client = pymongo.MongoClient("mongodb://localhost:27017/")
+db = client["options_pricing"]
+collection = db["option_prices"]
 
 def black_scholes(S, K, T, r, sigma):
-    """Computes Black-Scholes Call & Put option prices"""
-    d1 = (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    """Calculate Black-Scholes call and put option prices."""
+    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
 
-    call_price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
-    put_price = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+    call = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+    put = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+    
+    return call, put, d1, d2
 
-    return call_price, put_price
+def compute_greeks(S, K, T, r, sigma):
+    """Compute Black-Scholes Greeks."""
+    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
 
-# Streamlit UI
-st.title("Black-Scholes Option Pricing Heatmap")
+    delta = norm.cdf(d1)
+    gamma = norm.pdf(d1) / (S * sigma * np.sqrt(T))
+    vega = S * norm.pdf(d1) * np.sqrt(T)
+    theta = (-S * norm.pdf(d1) * sigma / (2 * np.sqrt(T))) - (r * K * np.exp(-r * T) * norm.cdf(d2))
+    rho = K * T * np.exp(-r * T) * norm.cdf(d2)
 
-# User Inputs
-min_S0 = st.number_input("Min Stock Price (S0)", value=80.0)
-max_S0 = st.number_input("Max Stock Price (S0)", value=120.0)
-min_sigma = st.number_input("Min Volatility (σ)", value=0.10)
-max_sigma = st.number_input("Max Volatility (σ)", value=0.50)
-grid_size = st.slider("Grid Size", min_value=10, max_value=50, value=30)
+    return delta, gamma, vega, theta, rho
 
-# Dropdown to choose between Call and Put
-option_type = st.selectbox("Select Option Type", ["Call", "Put"])
+if __name__ == "__main__":
+    print("Welcome to the Black-Scholes Option Pricer")
 
-# Generate data grid
-stock_prices = np.linspace(min_S0, max_S0, grid_size)
-volatilities = np.linspace(min_sigma, max_sigma, grid_size)
+    # Taking user inputs
+    S0 = float(input("Enter Current Stock Price (S0): "))
+    K = float(input("Enter Strike Price (K): "))
+    T = float(input("Enter Time to Expiry in years (T): "))
+    r = float(input("Enter Risk-Free Interest Rate as decimal (r): "))
+    sigma = float(input("Enter Volatility as decimal (σ): "))
 
-heatmap_data = np.zeros((grid_size, grid_size))
+    # Compute option prices
+    call, put, d1, d2 = black_scholes(S0, K, T, r, sigma)
+    delta, gamma, vega, theta, rho = compute_greeks(S0, K, T, r, sigma)
 
-for i, S0 in enumerate(stock_prices):
-    for j, sigma in enumerate(volatilities):
-        call_price, put_price = black_scholes(S0, 100, 1, 0.05, sigma)  # Strike = 100, T=1, r=5%
-        heatmap_data[j, i] = call_price if option_type == "Call" else put_price
+    # Print the results
+    print("\nCalculated Option Prices:")
+    print(f"Call Option Price: {call:.2f}")
+    print(f"Put Option Price: {put:.2f}")
 
-# Plot the heatmap
-fig, ax = plt.subplots(figsize=(10, 6))
-sns.heatmap(heatmap_data, xticklabels=np.round(stock_prices, 2), 
-            yticklabels=np.round(volatilities, 2), cmap="coolwarm", ax=ax)
+    print("\nCalculated Greeks:")
+    print(f"Delta: {delta:.4f}")
+    print(f"Gamma: {gamma:.4f}")
+    print(f"Vega: {vega:.4f}")
+    print(f"Theta: {theta:.4f}")
+    print(f"Rho: {rho:.4f}")
 
-st.pyplot(fig)
+    # Store in MongoDB
+    option_data = {
+        "date": datetime.datetime.utcnow(),
+        "S0": S0,
+        "K": K,
+        "T": T,
+        "r": r,
+        "sigma": sigma,
+        "call_price": call,
+        "put_price": put,
+        "Delta": delta,
+        "Gamma": gamma,
+        "Vega": vega,
+        "Theta": theta,
+        "Rho": rho,
+    }
+    collection.insert_one(option_data)
+    print("\n✅ Data successfully stored in MongoDB.")
